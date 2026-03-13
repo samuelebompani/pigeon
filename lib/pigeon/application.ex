@@ -14,6 +14,7 @@ defmodule Pigeon.Application do
       # Start a worker by calling: Pigeon.Worker.start_link(arg)
       # {Pigeon.Worker, arg},
       # Start to serve requests, typically the last entry
+      Pigeon.Presence,
       PigeonWeb.Endpoint
     ]
 
