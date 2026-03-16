@@ -11,10 +11,12 @@ defmodule Pigeon.Application do
       PigeonWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:pigeon, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Pigeon.PubSub},
+      {Registry, keys: :unique, name: Pigeon.PigeonRegistry},
       # Start a worker by calling: Pigeon.Worker.start_link(arg)
       # {Pigeon.Worker, arg},
       # Start to serve requests, typically the last entry
       Pigeon.Presence,
+      Pigeon.Repo,
       PigeonWeb.Endpoint
     ]
 

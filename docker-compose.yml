@@ -1,0 +1,18 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:15
+    container_name: pigeon-db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: pigeon_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pigeon_db_data:/var/lib/postgresql/data
+
+volumes:
+  pigeon_db_data:

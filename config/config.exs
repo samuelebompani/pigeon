@@ -21,6 +21,17 @@ config :pigeon, PigeonWeb.Endpoint,
   pubsub_server: Pigeon.PubSub,
   live_view: [signing_salt: "ak4HscdQ"]
 
+config :pigeon, Pigeon.Repo,
+  database: "pigeon_dev",
+  username: "postgres",
+  password: "postgres",
+  hostname: "localhost",
+  show_sensitive_data_on_connection_error: true,
+  pool_size: 10
+
+config :pigeon,
+  ecto_repos: [Pigeon.Repo]
+
 # Configures the mailer
 #
 # By default it uses the "Local" adapter which stores the emails
