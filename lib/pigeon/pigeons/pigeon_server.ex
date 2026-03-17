@@ -1,7 +1,14 @@
 defmodule Pigeon.Pigeons.PigeonServer do
   use GenServer
 
-  # Client API
+  alias Pigeon.Repo
+  alias Pigeon.Pigeons.PigeonState
+
+  @max_hunger 100
+
+  # ──────────────────────────────────────────────────
+  # API
+  # ──────────────────────────────────────────────────
 
   def start_link(topic) do
     GenServer.start_link(__MODULE__, topic, name: via(topic))
@@ -11,180 +18,108 @@ defmodule Pigeon.Pigeons.PigeonServer do
     GenServer.cast(via(topic), :feed)
   end
 
-  def whereis(topic) do
-    case Registry.lookup(Pigeon.PigeonRegistry, topic) do
-      [{pid, _}] -> pid
-      [] -> nil
-    end
-  end
-
-  def pigeon_alive?(topic) do
-    whereis(topic) != nil
-  end
-
-  def get_hunger(topic) do
-    case whereis(topic) do
-      pid when is_pid(pid) ->
-        GenServer.call(pid, :get_hunger)
-      nil ->
-        {:error, :no_pigeon}
-    end
-  end
-
-  def remove_pigeon(topic) do
-    case whereis(topic) do
-      pid when is_pid(pid) ->
-        GenServer.cast(pid, :remove_yourself)
-      nil ->
-        :ok
-    end
-  end
-
-  def spawn_or_replace_pigeon(topic) do
-    # Remove existing pigeon if any
-    remove_pigeon(topic)
-
-    # Small delay to ensure cleanup
-    Process.sleep(100)
-
-    # Spawn new pigeon
-    case start_link(topic) do
-      {:ok, pid} -> {:ok, pid}
-      {:error, {:already_started, pid}} -> {:ok, pid}
-      error -> error
-    end
-  end
-
-  # GenServer Callbacks
-
   def via(topic) do
     {:via, Registry, {Pigeon.PigeonRegistry, topic}}
   end
 
+  # ──────────────────────────────────────────────────
+  # Init
+  # ──────────────────────────────────────────────────
+
   def init(topic) do
+    pigeon = Repo.get_by!(PigeonState, chat: topic)
+
     schedule_tick()
-    schedule_disappearance_check()
 
     {:ok,
      %{
        topic: topic,
-       hunger: 30,
-       created_at: System.system_time(:second)
+       hunger: pigeon.hunger,
+       personality: pigeon.personality
      }}
   end
 
-  def handle_call(:get_hunger, _from, state) do
-    {:reply, state.hunger, state}
-  end
+  # ──────────────────────────────────────────────────
+  # Calls / Casts
+  # ──────────────────────────────────────────────────
 
   def handle_cast(:feed, state) do
     hunger = max(state.hunger - 40, 0)
 
-    broadcast_chat(state.topic, "🕊️ pigeon", "peck peck (thank you)")
-    broadcast_state(state.topic, hunger)
+    broadcast_chat(state, "peck peck ❤️")
+    persist(state.topic, hunger)
 
     {:noreply, %{state | hunger: hunger}}
   end
 
-  def handle_cast(:remove_yourself, state) do
-    # Broadcast farewell message
-    broadcast_chat(state.topic, "🕊️ pigeon", "coo coo... goodbye!")
-
-    # Stop the process
-    {:stop, :normal, state}
-  end
+  # ──────────────────────────────────────────────────
+  # Tick
+  # ──────────────────────────────────────────────────
 
   def handle_info(:tick, state) do
-    hunger = min(state.hunger + 5, 100)
+    hunger = min(state.hunger + 5, @max_hunger)
 
     if :rand.uniform(100) < hunger do
-      speak(state.topic)
+      speak(state)
     end
 
-    broadcast_state(state.topic, hunger)
-
+    persist(state.topic, hunger)
     schedule_tick()
 
     {:noreply, %{state | hunger: hunger}}
   end
 
-  def handle_info(:check_disappearance, state) do
-    # 20% chance to disappear if hunger is high
-    if state.hunger > 80 and :rand.uniform(5) == 1 do
-      # Pigeon flies away
-      broadcast_chat(state.topic, "🕊️ pigeon", "coo... I'm flying away!")
+  # ──────────────────────────────────────────────────
+  # Behavior
+  # ──────────────────────────────────────────────────
 
-      # Clear the pigeon state from database
-      case Pigeon.Repo.get_by(Pigeon.Pigeons.PigeonState, chat: state.topic) do
-        nil -> :ok
-        existing -> Pigeon.Repo.delete(existing)
-      end
-
-      # Stop the process
-      {:stop, :normal, state}
-    else
-      schedule_disappearance_check()
-      {:noreply, state}
-    end
-  end
-
-  def terminate(_reason, state) do
-    # Clean up database state when pigeon terminates
-    case Pigeon.Repo.get_by(Pigeon.Pigeons.PigeonState, chat: state.topic) do
-      nil -> :ok
-      existing -> Pigeon.Repo.delete(existing)
-    end
-    :ok
-  end
-
-  # Private functions
-
-  defp speak(topic) do
+  defp speak(state) do
     msg =
-      Enum.random([
-        "coo",
-        "coo coo",
-        "flap flap",
-        "peck peck",
-        "cooooo"
-      ])
-
-    broadcast_chat(topic, "🕊️ pigeon", msg)
-  end
-
-  defp broadcast_chat(topic, user, content) do
-    message = %Pigeon.Chats.Message{
-      chat: topic,
-      username: user,
-      content: content
-    }
-
-    inserted_message = Pigeon.Repo.insert!(message)
-
-    Phoenix.PubSub.broadcast(Pigeon.PubSub, topic, {:new_message, inserted_message})
-  end
-
-  defp broadcast_state(topic, hunger) do
-    changeset =
-      case Pigeon.Repo.get_by(Pigeon.Pigeons.PigeonState, chat: topic) do
-        nil ->
-          %Pigeon.Pigeons.PigeonState{}
-          |> Ecto.Changeset.cast(%{chat: topic, hunger: hunger}, [:chat, :hunger])
-
-        existing_state ->
-          existing_state
-          |> Ecto.Changeset.cast(%{hunger: hunger}, [:hunger])
+      case state.personality do
+        "grumpy" -> "hmph"
+        "affectionate" -> "coo ❤️"
+        "chaotic" -> "COO???"
+        "lazy" -> "...coo"
+        "dramatic" -> "I am fading..."
       end
 
-    Pigeon.Repo.insert_or_update!(changeset)
-    Phoenix.PubSub.broadcast(Pigeon.PubSub, topic, {:pigeon_update, %{hunger: hunger}})
+    broadcast_chat(state, msg)
+  end
+
+  # ──────────────────────────────────────────────────
+  # Helpers
+  # ──────────────────────────────────────────────────
+
+  defp broadcast_chat(state, msg) do
+    message =
+      Repo.insert!(%Pigeon.Chats.Message{
+        chat: state.topic,
+        username: "🕊️ pigeon",
+        content: msg
+      })
+
+    Phoenix.PubSub.broadcast(
+      Pigeon.PubSub,
+      state.topic,
+      {:new_message, message}
+    )
+  end
+
+  defp persist(topic, hunger) do
+    pigeon = Repo.get_by!(PigeonState, chat: topic)
+
+    pigeon
+    |> Ecto.Changeset.change(hunger: hunger)
+    |> Repo.update!()
+
+    Phoenix.PubSub.broadcast(
+      Pigeon.PubSub,
+      topic,
+      {:pigeon_update, %{hunger: hunger}}
+    )
   end
 
   defp schedule_tick do
     Process.send_after(self(), :tick, 8_000)
-  end
-
-  defp schedule_disappearance_check do
-    Process.send_after(self(), :check_disappearance, 30_000) # Check every 30 seconds
   end
 end

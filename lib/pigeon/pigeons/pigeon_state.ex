@@ -3,8 +3,13 @@ defmodule Pigeon.Pigeons.PigeonState do
   import Ecto.Changeset
 
   schema "pigeons" do
-    field :chat, :string
-    field :hunger, :integer
+    field(:chat, :string)
+    field(:hunger, :integer)
+
+    # ["User_123", "User_456"]
+    field(:owners, {:array, :string})
+    # "pending" | "active"
+    field(:status, :string)
     timestamps()
   end
 

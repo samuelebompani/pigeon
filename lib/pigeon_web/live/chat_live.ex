@@ -1,51 +1,46 @@
 defmodule PigeonWeb.ChatLive do
   use PigeonWeb, :live_view
-  alias Pigeon.Presence
-  alias Pigeon.Pigeons.PigeonServer
+
   alias Pigeon.Repo
-  alias Pigeon.Pigeons.PigeonState
+  alias Pigeon.Pigeons.{PigeonServer, PigeonState}
+
+  @personalities ["grumpy", "affectionate", "chaotic", "lazy", "dramatic"]
 
   # ──────────────────────────────────────────────────
   # Mount
   # ──────────────────────────────────────────────────
 
-  def mount(_params, _session, socket) do
-    username = "User_#{:rand.uniform(1000)}"
+  # landing
+  def mount(params, _session, socket) do
+    case socket.assigns.live_action do
+      :index ->
+        {:ok,
+         socket
+         |> assign(:page, :home)
+         |> assign(:users, ["alice", "bob", "charlie"])}
 
-    if connected?(socket) do
-      {:ok, _} = Presence.track(self(), "lobby", username, %{joined_at: System.os_time(:second)})
-      Phoenix.PubSub.subscribe(Pigeon.PubSub, "lobby")
+      :chat ->
+        other = params["user"]
+        me = "User_#{:rand.uniform(1000)}"
+        topic = topic_for(me, other)
+
+        if connected?(socket) do
+          Phoenix.PubSub.subscribe(Pigeon.PubSub, topic)
+        end
+
+        messages = load_messages(topic)
+        pigeon = Repo.get_by(PigeonState, chat: topic)
+
+        {:ok,
+         socket
+         |> stream(:messages, messages, reset: true)
+         |> assign(:page, :chat)
+         |> assign(:me, me)
+         |> assign(:other, other)
+         |> assign(:topic, topic)
+         |> assign_pigeon(pigeon)
+         |> assign(:message_input, "")}
     end
-
-    online_users = list_users("lobby")
-
-    # Determine current topic
-    chat = :lobby
-    topic = topic_for(chat, username)
-
-    # Load messages from DB
-    import Ecto.Query, only: [from: 2]
-
-    messages =
-      Repo.all(
-        from(m in Pigeon.Chats.Message,
-          where: m.chat == ^topic,
-          order_by: [asc: m.inserted_at]
-        )
-      )
-
-    # Check if pigeon exists for this topic
-    {pigeon_alive, pigeon_hunger} = check_pigeon_status(topic)
-
-    {:ok,
-     socket
-     |> stream(:messages, messages, reset: true)
-     |> assign(:username, username)
-     |> assign(:message_input, "")
-     |> assign(:chat, chat)
-     |> assign(:online_users, online_users)
-     |> assign(:pigeon_alive, pigeon_alive)
-     |> assign(:pigeon_hunger, pigeon_hunger)}
   end
 
   # ──────────────────────────────────────────────────
@@ -56,60 +51,56 @@ defmodule PigeonWeb.ChatLive do
     msg = String.trim(msg)
 
     if msg != "" do
-      topic = current_topic(socket)
+      message =
+        Repo.insert!(%Pigeon.Chats.Message{
+          chat: socket.assigns.topic,
+          username: socket.assigns.me,
+          content: msg
+        })
 
-      # Create the message struct
-      message = %Pigeon.Chats.Message{
-        chat: current_topic(socket),
-        username: socket.assigns.username,
-        content: msg
-      }
-
-      # IMPORTANT: Use the returned record from insert! which has inserted_at set
-      inserted_message = Repo.insert!(message)
-
-      # Broadcast the inserted message (with inserted_at populated)
       Phoenix.PubSub.broadcast(
         Pigeon.PubSub,
-        topic,
-        {:new_message, inserted_message}
+        socket.assigns.topic,
+        {:new_message, message}
       )
     end
 
     {:noreply, assign(socket, :message_input, "")}
   end
 
-  def handle_event("update_message", %{"message" => msg}, socket) do
-    {:noreply, assign(socket, :message_input, msg)}
-  end
+  def handle_event("request_adoption", _, socket) do
+    Repo.insert!(%PigeonState{
+      chat: socket.assigns.topic,
+      owners: [socket.assigns.me, socket.assigns.other],
+      status: "pending",
+      hunger: 30
+    })
 
-  def handle_event("spawn_pigeon", _, socket) do
-    topic = current_topic(socket)
-
-    case PigeonServer.start_link(topic) do
-      {:ok, _} -> :ok
-      {:error, {:already_started, _}} -> :ok
-      _ -> :ignore
-    end
-
-    {:noreply, assign(socket, :pigeon_alive, true)}
-  end
-
-  def handle_event("feed_pigeon", _, socket) do
-    PigeonServer.feed(current_topic(socket))
+    broadcast(socket, {:adoption_requested})
     {:noreply, socket}
   end
 
-  def handle_event("open_dm", %{"user" => other}, socket) do
-    if other == socket.assigns.username do
-      {:noreply, socket}
-    else
-      {:noreply, switch_chat(socket, {:dm, other})}
-    end
+  def handle_event("accept_adoption", _, socket) do
+    pigeon = Repo.get_by!(PigeonState, chat: socket.assigns.topic)
+
+    pigeon =
+      pigeon
+      |> Ecto.Changeset.change(
+        status: "active",
+        personality: Enum.random(@personalities)
+      )
+      |> Repo.update!()
+
+    PigeonServer.start_link(socket.assigns.topic)
+
+    broadcast(socket, {:adoption_accepted})
+
+    {:noreply, assign_pigeon(socket, pigeon)}
   end
 
-  def handle_event("open_lobby", _, socket) do
-    {:noreply, switch_chat(socket, :lobby)}
+  def handle_event("feed_pigeon", _, socket) do
+    PigeonServer.feed(socket.assigns.topic)
+    {:noreply, socket}
   end
 
   # ──────────────────────────────────────────────────
@@ -120,19 +111,24 @@ defmodule PigeonWeb.ChatLive do
     {:noreply, stream_insert(socket, :messages, msg)}
   end
 
-  def handle_info(%Phoenix.Socket.Broadcast{event: "presence_diff"}, socket) do
-    {:noreply, assign(socket, :online_users, list_users("lobby"))}
+  def handle_info({:adoption_requested}, socket) do
+    pigeon = Repo.get_by(PigeonState, chat: socket.assigns.topic)
+    {:noreply, assign_pigeon(socket, pigeon)}
+  end
+
+  def handle_info({:adoption_accepted}, socket) do
+    pigeon = Repo.get_by(PigeonState, chat: socket.assigns.topic)
+    {:noreply, assign_pigeon(socket, pigeon)}
   end
 
   def handle_info({:pigeon_update, %{hunger: hunger}}, socket) do
     {:noreply, assign(socket, :pigeon_hunger, hunger)}
   end
 
-  # Handle case when pigeon disappears
-  def handle_info({:pigeon_gone, _reason}, socket) do
+  def handle_info({:pigeon_gone}, socket) do
     {:noreply,
      socket
-     |> assign(:pigeon_alive, false)
+     |> assign(:pigeon_status, nil)
      |> assign(:pigeon_hunger, 0)}
   end
 
@@ -142,89 +138,79 @@ defmodule PigeonWeb.ChatLive do
 
   def render(assigns) do
     ~H"""
-    <div class="flex h-screen bg-gray-100 text-black">
+    <div class="h-screen flex flex-col text-black bg-gray-100">
+      <%= if @page == :home do %>
+        <div class="p-10">
+          <h1 class="text-xl mb-4">Choose someone to chat with</h1>
 
-    <!-- Sidebar -->
-      <aside class="w-56 bg-gray-900 text-gray-200 flex flex-col">
-        <div class="p-4 border-b border-gray-700">
-          <h1 class="text-lg font-bold">🐦 Pigeon</h1>
-          <p class="text-xs opacity-60">{@username}</p>
+          <%= for user <- @users do %>
+            <a href={"/chat/#{user}"} class="block underline">
+              {user}
+            </a>
+          <% end %>
         </div>
-
-        <button
-          phx-click="open_lobby"
-          class="p-3 hover:bg-gray-700 text-left"
-        >
-          # lobby
-        </button>
-
-        <div class="px-3 text-xs uppercase opacity-60 mt-4">
-          Online
-        </div>
-
-        <ul>
-          <li :for={user <- @online_users} :if={user != @username}>
-            <button
-              phx-click="open_dm"
-              phx-value-user={user}
-              class="w-full text-left px-3 py-2 hover:bg-gray-700"
-            >
-              ● {user}
-            </button>
-          </li>
-        </ul>
-      </aside>
-
-    <!-- Chat -->
-      <div class="flex-1 flex flex-col">
+      <% else %>
 
     <!-- Header -->
-        <header class="bg-white border-b p-4 flex justify-between items-center">
-          <div class="font-semibold">
-            {case @chat do
-              :lobby -> "# lobby"
-              {:dm, other} -> "@#{other}"
-            end}
-          </div>
-
-          <div class="flex gap-2">
-            <button
-              phx-click="spawn_pigeon"
-              class="bg-yellow-400 px-3 py-1 rounded text-sm"
-            >
-              🕊️ Adopt
-            </button>
-
-            <button
-              phx-click="feed_pigeon"
-              class="bg-green-500 text-white px-3 py-1 rounded text-sm"
-            >
-              Feed
-            </button>
+        <header class="p-4 border-b bg-white flex justify-between items-center">
+          <div class="font-semibold text-lg">
+            Chat with @{@other}
           </div>
         </header>
 
-    <!-- Pigeon -->
-        <div
-          :if={@pigeon_alive}
-          class="bg-yellow-100 border-b p-3 text-sm flex items-center gap-2"
-        >
-          🕊️ Your pigeon is here
-        </div>
-        <div :if={@pigeon_alive} class="bg-yellow-100 border-b p-3">
-          <div class="flex items-center gap-3">
-            <div class="flex-1">
-              <div class="text-xs text-gray-600">Pigeon hunger</div>
+    <!-- Pigeon Panel -->
+        <div class="p-4 border-b bg-yellow-50">
+          <%= if is_nil(@pigeon_status) do %>
+            <button
+              phx-click="request_adoption"
+              class="bg-yellow-400 px-4 py-2 rounded shadow"
+            >
+              🐦 Adopt a pigeon together
+            </button>
+          <% else %>
+            <%= if @pigeon_status == "pending" do %>
+              <div class="flex items-center justify-between">
+                <span>🐦 Adoption pending...</span>
 
-              <div class="w-full bg-gray-200 rounded h-2 mt-1">
-                <div
-                  class="bg-red-400 h-2 rounded"
-                  style={"width: #{@pigeon_hunger}%"}
+                <button
+                  phx-click="accept_adoption"
+                  class="bg-green-500 text-white px-3 py-1 rounded"
                 >
+                  Accept
+                </button>
+              </div>
+            <% else %>
+              <div class="space-y-3">
+                <div class="flex items-center justify-between">
+                  <div class="text-sm">
+                    🕊️ <b>{@pigeon_personality}</b> pigeon
+                  </div>
+
+                  <button
+                    phx-click="feed_pigeon"
+                    class="bg-green-500 text-white px-3 py-1 rounded text-sm"
+                  >
+                    Feed
+                  </button>
+                </div>
+
+    <!-- Hunger bar -->
+                <div>
+                  <div class="text-xs text-gray-600 mb-1">
+                    Hunger
+                  </div>
+
+                  <div class="w-full bg-gray-200 h-2 rounded">
+                    <div
+                      class="bg-red-400 h-2 rounded transition-all"
+                      style={"width: #{@pigeon_hunger}%"}
+                    >
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
+            <% end %>
+          <% end %>
         </div>
 
     <!-- Messages -->
@@ -238,30 +224,24 @@ defmodule PigeonWeb.ChatLive do
             id={id}
             class={[
               "p-3 rounded-xl max-w-sm",
-              msg.username == @username && "ml-auto bg-purple-600 text-white",
+              msg.username == @me && "ml-auto bg-purple-600 text-white",
               msg.username == "🕊️ pigeon" && "bg-yellow-200",
-              msg.username != @username && msg.username != "🕊️ pigeon" && "bg-white shadow"
+              msg.username != @me && msg.username != "🕊️ pigeon" && "bg-white shadow"
             ]}
           >
             <div class="text-xs opacity-60 mb-1">
-              {msg.username} · {format_time(msg.inserted_at || msg.timestamp)}
+              {msg.username}
             </div>
 
-            <div>
-              {msg.content}
-            </div>
+            <div>{msg.content}</div>
           </div>
         </div>
 
     <!-- Input -->
-        <form
-          phx-submit="send_message"
-          class="border-t p-3 flex gap-2 bg-white"
-        >
+        <form phx-submit="send_message" class="p-3 bg-white border-t flex gap-2">
           <input
             name="message"
             value={@message_input}
-            phx-change="update_message"
             class="flex-1 border rounded px-3 py-2"
             autocomplete="off"
           />
@@ -270,7 +250,7 @@ defmodule PigeonWeb.ChatLive do
             Send
           </button>
         </form>
-      </div>
+      <% end %>
     </div>
     """
   end
@@ -279,60 +259,37 @@ defmodule PigeonWeb.ChatLive do
   # Helpers
   # ──────────────────────────────────────────────────
 
-  defp current_topic(socket) do
-    topic_for(socket.assigns.chat, socket.assigns.username)
-  end
-
-  defp topic_for(:lobby, _), do: "lobby"
-
-  defp topic_for({:dm, other}, me) do
-    [a, b] = Enum.sort([me, other])
+  defp topic_for(a, b) do
+    [a, b] = Enum.sort([a, b])
     "dm:#{a}:#{b}"
   end
 
-  defp switch_chat(socket, chat) do
-    me = socket.assigns.username
+  defp load_messages(topic) do
+    import Ecto.Query
 
-    old = topic_for(socket.assigns.chat, me)
-    new = topic_for(chat, me)
+    Repo.all(
+      from(m in Pigeon.Chats.Message,
+        where: m.chat == ^topic,
+        order_by: [asc: m.inserted_at]
+      )
+    )
+  end
 
-    Phoenix.PubSub.unsubscribe(Pigeon.PubSub, old)
-    Phoenix.PubSub.subscribe(Pigeon.PubSub, new)
-
-    # Check pigeon status for the new topic
-    {pigeon_alive, pigeon_hunger} = check_pigeon_status(new)
-
+  defp assign_pigeon(socket, nil) do
     socket
-    |> assign(:chat, chat)
-    |> assign(:pigeon_alive, pigeon_alive)
-    |> assign(:pigeon_hunger, pigeon_hunger)
-    |> stream(:messages, [], reset: true)
+    |> assign(:pigeon_status, nil)
+    |> assign(:pigeon_hunger, 0)
+    |> assign(:pigeon_personality, nil)
   end
 
-  defp check_pigeon_status(topic) do
-    case PigeonServer.whereis(topic) do
-      pid when is_pid(pid) ->
-        # Pigeon process exists, get its hunger
-        case PigeonServer.get_hunger(topic) do
-          {:ok, hunger} -> {true, hunger}
-          {:error, :no_pigeon} -> {false, 0}
-        end
-      nil ->
-        # No pigeon process, check if there's saved state
-        case Repo.get_by(PigeonState, chat: topic) do
-          nil -> {false, 0}
-          %{hunger: hunger} -> {true, hunger}
-        end
-    end
+  defp assign_pigeon(socket, pigeon) do
+    socket
+    |> assign(:pigeon_status, pigeon.status)
+    |> assign(:pigeon_hunger, pigeon.hunger)
+    |> assign(:pigeon_personality, pigeon.personality)
   end
 
-  defp list_users(topic) do
-    topic
-    |> Presence.list()
-    |> Map.keys()
+  defp broadcast(socket, msg) do
+    Phoenix.PubSub.broadcast(Pigeon.PubSub, socket.assigns.topic, msg)
   end
-
-  defp format_time(nil), do: ""
-  defp format_time(%NaiveDateTime{} = dt), do: "#{dt.hour}:#{String.pad_leading("#{dt.minute}", 2, "0")}"
-  defp format_time(%DateTime{} = dt), do: "#{dt.hour}:#{String.pad_leading("#{dt.minute}", 2, "0")}"
 end
