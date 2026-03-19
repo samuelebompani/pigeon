@@ -4,6 +4,7 @@ defmodule Pigeon.Pigeons.PigeonState do
 
   schema "pigeons" do
     field(:chat, :string)
+    field(:name, :string)
     field(:hunger, :integer)
     field(:owners, {:array, :string})
     field(:status, :string)

@@ -3,6 +3,7 @@ defmodule PigeonWeb.ChatLive do
 
   alias Pigeon.Repo
   alias Pigeon.Pigeons.{PigeonServer, PigeonState}
+  alias Pigeon.Pigeons.PigeonNames
 
   @personalities ["grumpy", "affectionate", "chaotic", "lazy", "dramatic"]
 
@@ -86,7 +87,8 @@ defmodule PigeonWeb.ChatLive do
       pigeon
       |> Ecto.Changeset.change(
         status: "active",
-        personality: Enum.random(@personalities)
+        personality: Enum.random(@personalities),
+        name: PigeonNames.random()
       )
       |> Repo.update!()
 
@@ -246,7 +248,7 @@ defmodule PigeonWeb.ChatLive do
                     🕊️
                   </div>
                   <div>
-                    <div style="font-size:13px;font-weight:500;color:#d4c8f0;">Your pigeon</div>
+                    <div style="font-size:13px;font-weight:500;color:#d4c8f0;">{@pigeon_name || "Your pigeon"}</div>
                     <div style="font-size:10px;color:#8b7faa;background:rgba(180,160,240,0.1);border:1px solid rgba(180,160,240,0.15);border-radius:4px;padding:1px 6px;text-transform:uppercase;letter-spacing:0.06em;display:inline-block;margin-top:2px;">
                       {@pigeon_personality}
                     </div>
@@ -360,6 +362,7 @@ defmodule PigeonWeb.ChatLive do
     |> assign(:pigeon_status, nil)
     |> assign(:pigeon_hunger, 0)
     |> assign(:pigeon_personality, nil)
+    |> assign(:pigeon_name, nil)
     |> assign(:other_requested, nil)
   end
 
@@ -368,6 +371,7 @@ defmodule PigeonWeb.ChatLive do
     |> assign(:pigeon_status, pigeon.status)
     |> assign(:pigeon_hunger, pigeon.hunger)
     |> assign(:pigeon_personality, pigeon.personality)
+    |> assign(:pigeon_name, pigeon.name)
     |> assign(:other_requested, pigeon.requested_by)
   end
 
