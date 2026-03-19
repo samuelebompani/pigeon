@@ -22,3 +22,8 @@ config :phoenix, :plug_init_mode, :runtime
 # Enable helpful, but potentially expensive runtime checks
 config :phoenix_live_view,
   enable_expensive_runtime_checks: true
+
+  # config/test.exs
+config :pigeon, Pigeon.Repo,
+  pool: Ecto.Adapters.SQL.Sandbox,
+  pool_size: 10

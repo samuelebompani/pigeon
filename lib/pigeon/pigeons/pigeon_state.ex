@@ -5,11 +5,10 @@ defmodule Pigeon.Pigeons.PigeonState do
   schema "pigeons" do
     field(:chat, :string)
     field(:hunger, :integer)
-
-    # ["User_123", "User_456"]
     field(:owners, {:array, :string})
-    # "pending" | "active"
     field(:status, :string)
+    field(:personality, :string)
+    field(:requested_by, :string)
     timestamps()
   end
 

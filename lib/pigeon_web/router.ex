@@ -17,8 +17,18 @@ defmodule PigeonWeb.Router do
   scope "/", PigeonWeb do
     pipe_through :browser
 
-    live "/", ChatLive, :index
-    live "/chat/:user", ChatLive, :chat
+    live "/login", LoginLive
+    live "/register", RegisterLive
+    post "/login", SessionController, :create
+    delete "/logout", SessionController, :delete
+    post "/register", RegisterController, :create
+
+    # Everything below requires a session
+    live_session :authenticated,
+      on_mount: {PigeonWeb.Auth, :require_authenticated} do
+      live "/", HomeLive
+      live "/chat/:user", ChatLive
+    end
   end
 
   # Other scopes may use custom stacks.
