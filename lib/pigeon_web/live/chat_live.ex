@@ -21,6 +21,16 @@ defmodule PigeonWeb.ChatLive do
     messages = load_messages(topic)
     pigeon = Repo.get_by(PigeonState, chat: topic)
 
+    if connected?(socket) && pigeon && pigeon.status == "active" do
+      pid =
+        case PigeonServer.start_link(topic) do
+          {:ok, pid} -> pid
+          {:error, {:already_started, pid}} -> pid
+        end
+
+      Process.monitor(pid)
+    end
+
     {:ok,
      socket
      |> stream(:messages, messages, reset: true)
@@ -80,10 +90,15 @@ defmodule PigeonWeb.ChatLive do
       )
       |> Repo.update!()
 
-    PigeonServer.start_link(socket.assigns.topic)
+    pid =
+      case PigeonServer.start_link(socket.assigns.topic) do
+        {:ok, pid} -> pid
+        {:error, {:already_started, pid}} -> pid
+      end
+
+    Process.monitor(pid)
 
     broadcast(socket, {:adoption_accepted})
-
     {:noreply, assign_pigeon(socket, pigeon)}
   end
 
@@ -130,6 +145,10 @@ defmodule PigeonWeb.ChatLive do
      socket
      |> assign(:pigeon_status, nil)
      |> assign(:pigeon_hunger, 0)}
+  end
+
+  def handle_info({:DOWN, _ref, :process, _pid, _reason}, socket) do
+    {:noreply, assign_pigeon(socket, nil)}
   end
 
   # ──────────────────────────────────────────────────
