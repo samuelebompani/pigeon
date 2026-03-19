@@ -138,70 +138,120 @@ defmodule PigeonWeb.ChatLive do
 
   def render(assigns) do
     ~H"""
-    <div class="h-screen flex flex-col text-black bg-gray-100">
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400&display=swap');
+      .pigeon-app { font-family: 'DM Sans', sans-serif; }
+      .msg-input:focus { outline: none; border-color: rgba(180,160,240,0.35) !important; }
+      .msg-input::placeholder { color: #3a3840; }
+      .hunger-fill { transition: width 0.4s ease; }
+      .feed-btn:hover { background: rgba(130,200,130,0.22) !important; }
+      .send-btn:hover { background: #4d3f8a !important; }
+      .adopt-btn:hover { background: rgba(180,160,240,0.18) !important; }
+      .accept-btn:hover { background: rgba(130,200,130,0.22) !important; }
+      .decline-btn:hover { background: rgba(220,100,100,0.22) !important; }
+    </style>
+
+    <div
+      class="pigeon-app"
+      style="background:#0f0f11;color:#e8e6df;height:100dvh;display:flex;flex-direction:column;"
+    >
 
     <!-- Header -->
-      <header class="p-4 border-b bg-white flex justify-between items-center">
-        <div class="font-semibold text-lg">
-          Chat with @{@other}
+      <div style="padding:14px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,0.07);background:#16161a;">
+        <a
+          href="/"
+          style="width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.08);display:flex;align-items:center;justify-content:center;text-decoration:none;"
+        >
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+            <path
+              d="M7 2L3 6L7 10"
+              stroke="#888"
+              stroke-width="1.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            />
+          </svg>
+        </a>
+        <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#3d3550,#2a2040);border:1px solid rgba(255,255,255,0.12);display:flex;align-items:center;justify-content:center;font-size:13px;color:#c4b8f0;font-weight:500;">
+          {String.upcase(String.slice(@other, 0, 1))}
         </div>
-      </header>
+        <div>
+          <div style="font-size:14px;font-weight:500;color:#eeeae0;">@{@other}</div>
+        </div>
+      </div>
 
     <!-- Pigeon Panel -->
-      <div class="p-4 border-b bg-yellow-50">
+      <div style="margin:12px 14px 0;">
         <%= if is_nil(@pigeon_status) do %>
           <button
             phx-click="request_adoption"
-            class="bg-yellow-400 px-4 py-2 rounded shadow"
+            class="adopt-btn"
+            style="width:100%;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;background:rgba(180,160,240,0.1);color:#c4b8f0;border:1px solid rgba(180,160,240,0.2);border-radius:10px;padding:10px 14px;cursor:pointer;text-align:left;transition:background 0.15s;"
           >
-            🐦 Adopt a pigeon together
+            🕊️ Adopt a pigeon together
           </button>
         <% else %>
           <%= if @pigeon_status == "pending" do %>
-            <div class="flex items-center justify-between">
+            <div style="background:#1c1a24;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;">
               <%= if @me != @other_requested do %>
-                <span>🐦 <b>{@other}</b> wants to adopt a pigeon together!</span>
-                <div class="flex gap-2">
+                <div style="font-size:13px;color:#b0a8c8;">
+                  🕊️ <b style="color:#ddd8f0;">{@other}</b> wants to adopt a pigeon
+                </div>
+                <div style="display:flex;gap:8px;">
                   <button
                     phx-click="accept_adoption"
-                    class="bg-green-500 text-white px-3 py-1 rounded"
+                    class="accept-btn"
+                    style="font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;background:rgba(130,200,130,0.12);color:#7dd08a;border:1px solid rgba(130,200,130,0.2);border-radius:7px;padding:5px 12px;cursor:pointer;transition:background 0.15s;"
                   >
                     Accept
                   </button>
                   <button
                     phx-click="decline_adoption"
-                    class="bg-red-400 text-white px-3 py-1 rounded"
+                    class="decline-btn"
+                    style="font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;background:rgba(220,100,100,0.1);color:#d08080;border:1px solid rgba(220,100,100,0.2);border-radius:7px;padding:5px 12px;cursor:pointer;transition:background 0.15s;"
                   >
                     Decline
                   </button>
                 </div>
               <% else %>
-                <span>🐦 Adoption request sent, waiting for <b>{@other}</b>...</span>
+                <div style="font-size:13px;color:#6b6460;">
+                  🕊️ Waiting for <b style="color:#9088a8;">{@other}</b> to accept…
+                </div>
               <% end %>
             </div>
           <% else %>
-            <div class="space-y-3">
-              <div class="flex items-center justify-between">
-                <div class="text-sm">
-                  🕊️ <b>{@pigeon_personality}</b> pigeon
+            <div style="background:#1c1a24;border:1px solid rgba(255,255,255,0.08);border-radius:12px;padding:12px 14px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <div style="width:28px;height:28px;border-radius:8px;background:rgba(255,220,100,0.12);border:1px solid rgba(255,220,100,0.2);display:flex;align-items:center;justify-content:center;font-size:14px;">
+                    🕊️
+                  </div>
+                  <div>
+                    <div style="font-size:13px;font-weight:500;color:#d4c8f0;">Your pigeon</div>
+                    <div style="font-size:10px;color:#8b7faa;background:rgba(180,160,240,0.1);border:1px solid rgba(180,160,240,0.15);border-radius:4px;padding:1px 6px;text-transform:uppercase;letter-spacing:0.06em;display:inline-block;margin-top:2px;">
+                      {@pigeon_personality}
+                    </div>
+                  </div>
                 </div>
                 <button
                   phx-click="feed_pigeon"
-                  class="bg-green-500 text-white px-3 py-1 rounded text-sm"
+                  class="feed-btn"
+                  style="font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;background:rgba(130,200,130,0.12);color:#7dd08a;border:1px solid rgba(130,200,130,0.2);border-radius:7px;padding:5px 12px;cursor:pointer;transition:background 0.15s;"
                 >
                   Feed
                 </button>
               </div>
-
-    <!-- Hunger bar -->
-              <div>
-                <div class="text-xs text-gray-600 mb-1">Hunger</div>
-                <div class="w-full bg-gray-200 h-2 rounded">
+              <div style="display:flex;align-items:center;gap:10px;">
+                <div style="font-size:11px;color:#5a5850;min-width:42px;">Hunger</div>
+                <div style="flex:1;height:3px;background:rgba(255,255,255,0.07);border-radius:99px;overflow:hidden;">
                   <div
-                    class="bg-red-400 h-2 rounded transition-all"
-                    style={"width: #{@pigeon_hunger}%"}
+                    class="hunger-fill"
+                    style={"width:#{@pigeon_hunger}%;height:100%;background:linear-gradient(90deg,#e06060,#e08040);border-radius:99px;"}
                   >
                   </div>
+                </div>
+                <div style="font-size:11px;color:#5a5850;font-family:'DM Mono',monospace;min-width:28px;text-align:right;">
+                  {@pigeon_hunger}
                 </div>
               </div>
             </div>
@@ -213,33 +263,55 @@ defmodule PigeonWeb.ChatLive do
       <div
         id="messages"
         phx-update="stream"
-        class="flex-1 overflow-y-auto p-4 space-y-2"
+        phx-hook="ScrollBottom"
+        style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px;scrollbar-width:none;"
       >
         <div
           :for={{id, msg} <- @streams.messages}
           id={id}
-          class={[
-            "p-3 rounded-xl max-w-sm",
-            msg.username == @me && "ml-auto bg-purple-600 text-white",
-            msg.username == "🕊️ pigeon" && "bg-yellow-200",
-            msg.username != @me && msg.username != "🕊️ pigeon" && "bg-white shadow"
-          ]}
+          style={
+            if msg.username == @me,
+              do: "display:flex;gap:8px;flex-direction:row-reverse;",
+              else: "display:flex;gap:8px;"
+          }
         >
-          <div class="text-xs opacity-60 mb-1">{msg.username}</div>
-          <div>{msg.content}</div>
+          <div style={avatar_style(msg.username, @me)}>
+            <%= if msg.username == "🕊️ pigeon" do %>
+              🕊
+            <% else %>
+              {String.upcase(String.slice(msg.username, 0, 1))}
+            <% end %>
+          </div>
+          <div>
+            <div style={bubble_style(msg.username, @me)}>
+              {msg.content}
+            </div>
+          </div>
         </div>
       </div>
 
     <!-- Input -->
-      <form phx-submit="send_message" class="p-3 bg-white border-t flex gap-2">
-        <input
-          name="message"
-          value={@message_input}
-          class="flex-1 border rounded px-3 py-2"
-          autocomplete="off"
-        />
-        <button class="bg-purple-600 text-white px-4 rounded">Send</button>
-      </form>
+      <div style="padding:10px 14px 18px;display:flex;gap:8px;align-items:center;border-top:1px solid rgba(255,255,255,0.06);background:#16161a;">
+        <form phx-submit="send_message" style="flex:1;display:flex;gap:8px;align-items:center;">
+          <input
+            name="message"
+            value={@message_input}
+            class="msg-input"
+            placeholder={"Message @#{@other}…"}
+            autocomplete="off"
+            style="flex:1;font-family:'DM Sans',sans-serif;font-size:13px;background:#1c1b24;border:1px solid rgba(255,255,255,0.1);color:#e0dcf0;border-radius:10px;padding:9px 14px;"
+          />
+          <button
+            type="submit"
+            class="send-btn"
+            style="width:36px;height:36px;border-radius:10px;background:#3d2f7a;border:1px solid rgba(180,160,240,0.25);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background 0.15s;"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="#c0b0f0">
+              <path d="M14 8L2 2l2.5 6L2 14l12-6z" />
+            </svg>
+          </button>
+        </form>
+      </div>
     </div>
     """
   end
@@ -282,5 +354,40 @@ defmodule PigeonWeb.ChatLive do
 
   defp broadcast(socket, msg) do
     Phoenix.PubSub.broadcast(Pigeon.PubSub, socket.assigns.topic, msg)
+  end
+
+  defp bubble_style(username, me) do
+    base = "max-width:280px;padding:8px 12px;font-size:13px;line-height:1.5;"
+
+    cond do
+      username == me ->
+        base <>
+          "background:#2d2650;border:1px solid rgba(180,160,240,0.15);color:#ddd8f0;border-radius:12px;border-bottom-right-radius:4px;"
+
+      username == "🕊️ pigeon" ->
+        base <>
+          "background:rgba(255,220,100,0.08);border:1px solid rgba(255,220,100,0.15);color:#e8d87a;font-style:italic;border-radius:12px;border-bottom-left-radius:4px;"
+
+      true ->
+        base <>
+          "background:#1e1d26;border:1px solid rgba(255,255,255,0.07);color:#ccc8be;border-radius:12px;border-bottom-left-radius:4px;"
+    end
+  end
+
+  defp avatar_style(username, me) do
+    base =
+      "width:24px;height:24px;border-radius:50%;font-size:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;"
+
+    cond do
+      username == me ->
+        base <> "background:#2a2040;color:#b0a0e0;border:1px solid rgba(180,160,240,0.2);"
+
+      username == "🕊️ pigeon" ->
+        base <>
+          "background:rgba(255,220,100,0.1);color:#c8b840;border:1px solid rgba(255,220,100,0.2);font-size:11px;"
+
+      true ->
+        base <> "background:#222028;color:#888;border:1px solid rgba(255,255,255,0.08);"
+    end
   end
 end

@@ -19,36 +19,64 @@ defmodule PigeonWeb.LoginLive do
 
   def render(assigns) do
     ~H"""
-    <div class="min-h-screen flex items-center justify-center bg-gray-100">
-      <div class="bg-white p-8 rounded shadow w-80 space-y-4">
-        <h1 class="text-2xl font-bold text-center">🐦 Pigeon</h1>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&display=swap');
+      .pigeon-app { font-family: 'DM Sans', sans-serif; }
+      .auth-input:focus { outline: none; border-color: rgba(180,160,240,0.4) !important; }
+      .auth-input::placeholder { color: #3a3840; }
+      .auth-btn:hover { background: #4d3f8a !important; }
+    </style>
+
+    <div
+      class="pigeon-app"
+      style="background:#0f0f11;color:#e8e6df;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:20px;"
+    >
+      <div style="width:100%;max-width:320px;">
+        <div style="margin-bottom:32px;">
+          <div style="font-size:24px;font-weight:500;color:#eeeae0;letter-spacing:-0.02em;margin-bottom:6px;">
+            🕊️ Pigeon
+          </div>
+          <div style="font-size:13px;color:#4a4840;">Sign in to continue</div>
+        </div>
 
         <%= if @error do %>
-          <p class="text-red-500 text-sm">{@error}</p>
+          <div style="background:rgba(220,100,100,0.1);border:1px solid rgba(220,100,100,0.2);border-radius:8px;padding:10px 12px;font-size:13px;color:#d08080;margin-bottom:16px;">
+            {@error}
+          </div>
         <% end %>
 
-        <form phx-submit="login" class="space-y-3">
+        <form action="/login" method="post" style="display:flex;flex-direction:column;gap:10px;">
+          <input type="hidden" name="_csrf_token" value={Plug.CSRFProtection.get_csrf_token()} />
           <input
             name="username"
             placeholder="Username"
-            class="w-full border rounded px-3 py-2"
             autocomplete="username"
+            class="auth-input"
+            style="font-family:'DM Sans',sans-serif;font-size:14px;background:#1c1b24;border:1px solid rgba(255,255,255,0.1);color:#e0dcf0;border-radius:10px;padding:11px 14px;transition:border-color 0.15s;"
           />
           <input
             name="password"
             type="password"
             placeholder="Password"
-            class="w-full border rounded px-3 py-2"
             autocomplete="current-password"
+            class="auth-input"
+            style="font-family:'DM Sans',sans-serif;font-size:14px;background:#1c1b24;border:1px solid rgba(255,255,255,0.1);color:#e0dcf0;border-radius:10px;padding:11px 14px;transition:border-color 0.15s;"
           />
-          <button class="w-full bg-purple-600 text-white py-2 rounded">
-            Log in
+          <button
+            type="submit"
+            class="auth-btn"
+            style="font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;background:#3d2f7a;color:#ddd8f0;border:1px solid rgba(180,160,240,0.25);border-radius:10px;padding:11px;cursor:pointer;transition:background 0.15s;margin-top:4px;"
+          >
+            Sign in
           </button>
         </form>
 
-        <p class="text-sm text-center">
-          No account? <a href="/register" class="underline text-purple-600">Register</a>
-        </p>
+        <div style="margin-top:20px;font-size:13px;color:#3a3840;text-align:center;">
+          No account?
+          <a href="/register" style="color:#8b7faa;text-decoration:none;margin-left:4px;">
+            Create one
+          </a>
+        </div>
       </div>
     </div>
     """
